@@ -1,0 +1,76 @@
+public class TechnicianAvailabilityUpdater {
+    public static void updateTechnicianAvailability(List<WorkOrder__c> newWorkOrders) {
+        // List to hold Technicians to update their availability
+        List<Technician__c> techniciansToUpdate = new List<Technician__c>();
+        List<Assignment__c> assignmentsToCreate = new List<Assignment__c>();
+
+        // Iterate through the updated WorkOrder records
+        for (WorkOrder__c newWorkOrder : newWorkOrders) {
+            // Check if the work order status is 'Resolved'
+            if (newWorkOrder.Status__c == 'Resolved') {
+                System.debug('Processing WorkOrder ID: ' + newWorkOrder.Id); // Debug log for processing
+
+                // Query for the related Assignment records to get the Technician associated with the WorkOrder
+                List<Assignment__c> assignments = [SELECT Technician_ID__c FROM Assignment__c WHERE WorkOrder_ID__c = :newWorkOrder.Id];
+
+                // Iterate over each assignment to get the technician and update availability
+                for (Assignment__c assignment : assignments) {
+                    if (assignment.Technician_ID__c != null) {
+                        Technician__c technician = [SELECT Id, Availibility__c, Skills__c, Location__c FROM Technician__c WHERE Id = :assignment.Technician_ID__c LIMIT 1];
+
+                        // Update the Technician's Availability to 'Available' only if it's not already 'Available'
+                        if (technician != null && technician.Availibility__c != 'Available') {
+                            technician.Availibility__c = 'Available';
+                            techniciansToUpdate.add(technician);
+                            System.debug('Technician ' + technician.Id + ' marked as Available'); // Debug for technician availability update
+
+                            // Now that technician is available, check if they can be assigned to any new work orders
+                            // Query for any "New" status WorkOrders that need a technician
+                            List<WorkOrder__c> newStatusWorkOrders = [
+                                SELECT Id, Service_Type__c, Location__c
+                                FROM WorkOrder__c
+                                WHERE Status__c = 'New'
+                                AND Service_Type__c = :technician.Skills__c
+                                AND Location__c = :technician.Location__c
+                            ];
+
+                            // Create assignments for matching work orders
+                            for (WorkOrder__c workOrder : newStatusWorkOrders) {
+                                // Avoid assigning the same technician to the same work order twice
+                                if (!isTechnicianAssignedToWorkOrder(workOrder.Id, technician.Id)) {
+                                    Assignment__c newAssignment = new Assignment__c();
+                                    newAssignment.Technician_ID__c = technician.Id;
+                                    newAssignment.WorkOrder_ID__c = workOrder.Id;
+                                    assignmentsToCreate.add(newAssignment);
+                                    System.debug('Assignment created for Technician ' + technician.Id + ' and WorkOrder ' + workOrder.Id);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Update Technicians' availability to 'Available' if necessary
+        if (!techniciansToUpdate.isEmpty()) {
+            update techniciansToUpdate;
+            System.debug('Technicians availability updated: ' + techniciansToUpdate.size()); // Debug for updates
+        }
+
+        // Create Assignments if any are valid
+        if (!assignmentsToCreate.isEmpty()) {
+            insert assignmentsToCreate;
+            System.debug('Assignments created: ' + assignmentsToCreate.size()); // Debug for assignments created
+        }
+    }
+
+    // Helper method to check if technician is already assigned to the work order
+    private static Boolean isTechnicianAssignedToWorkOrder(Id workOrderId, Id technicianId) {
+        List<Assignment__c> existingAssignments = [
+            SELECT Id 
+            FROM Assignment__c 
+            WHERE WorkOrder_ID__c = :workOrderId AND Technician_ID__c = :technicianId
+        ];
+        return !existingAssignments.isEmpty();
+    }
+}
