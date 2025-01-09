@@ -1,0 +1,43 @@
+public class AssignmentHandler {
+    public static void updateWorkOrderAndTechnician(List<Assignment__c> assRec){
+        // List to hold WorkOrders that need to be updated
+        List<WorkOrder__c> workOrdersToUpdate = new List<WorkOrder__c>();
+        
+        // List to hold Technicians whose availability needs to be updated
+        List<Technician__c> techniciansToUpdate = new List<Technician__c>();
+        
+        try {
+            for(Assignment__c con : assRec){
+                if(con.Technician_ID__c != null){ 
+                    // Retrieve the related WorkOrder and update the status
+                    WorkOrder__c workOrder = [SELECT Id, Status__c FROM WorkOrder__c WHERE Id = :con.WorkOrder_ID__c LIMIT 1];
+                    
+                    if (workOrder != null && workOrder.Status__c != 'Resolved') {
+                        // Update the WorkOrder status to "Assigned/In Progress"
+                        workOrder.Status__c = 'Assigned/In Progress';
+                        workOrdersToUpdate.add(workOrder);
+                    }
+                    
+                    // Retrieve the technician and update availability to "Not Available"
+                    Technician__c technician = [SELECT Id, Availibility__c FROM Technician__c WHERE Id = :con.Technician_ID__c LIMIT 1];
+                    if (technician != null && technician.Availibility__c != 'Not Available') {
+                        technician.Availibility__c = 'Not Available';
+                        techniciansToUpdate.add(technician);
+                    }
+                }
+            }
+            
+            // Update the WorkOrders if there are any changes
+            if (!workOrdersToUpdate.isEmpty()) {
+                update workOrdersToUpdate;
+            }
+            
+            // Update the Technicians if there are any changes
+            if (!techniciansToUpdate.isEmpty()) {
+                update techniciansToUpdate;
+            }
+        } catch(Exception e) {
+            system.debug('Error -----> ' + e.getMessage());
+        }
+    }
+}
