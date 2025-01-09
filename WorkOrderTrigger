@@ -1,0 +1,41 @@
+trigger WorkOrderTrigger on WorkOrder__c (after insert, after update) {
+
+    if (Trigger.isAfter && Trigger.isInsert) {
+        // Handling after insert
+        WorkOrderClass.workOrder(Trigger.new);
+    }
+
+    if (Trigger.isAfter && Trigger.isUpdate) {
+        // Prepare email details for the future method
+        List<String> emailAddresses = new List<String>();
+        List<String> emailSubjects = new List<String>();
+        List<String> emailBodies = new List<String>();
+
+        for (Integer i = 0; i < Trigger.new.size(); i++) {
+            WorkOrder__c newWorkOrder = Trigger.new[i];
+            WorkOrder__c oldWorkOrder = Trigger.old[i];
+
+            if (newWorkOrder.Status__c == 'Resolved' && oldWorkOrder.Status__c != 'Resolved' && newWorkOrder.Email__c != null) {
+                emailAddresses.add(newWorkOrder.Email__c);
+                emailSubjects.add('Status Updated');
+                emailBodies.add(
+                    'Dear Customer, <br><br>Your work order (ID: ' + 
+                    newWorkOrder.Id + 
+                    ') has been marked as resolved. Thank you for your patience.'
+                );
+            }
+        }
+
+        // Call the future method to send emails
+        if (!emailAddresses.isEmpty()) {
+            CompletionMail.sendEmailInFuture(emailAddresses, emailSubjects, emailBodies);
+        }
+
+        // Handling Technician availability update
+        TechnicianAvailabilityUpdater.updateTechnicianAvailability(Trigger.new);
+        
+        // Create assignments for available technicians based on matching criteria
+        //WorkOrderClass.workOrder(Trigger.new);
+        
+    }
+}
